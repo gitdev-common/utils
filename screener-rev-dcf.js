@@ -75,7 +75,6 @@ window.launchReverseDCF = function () {
   const closeBtn = document.createElement('button');
   closeBtn.textContent = '×';
   closeBtn.style = `
-    position:absolute;
     top:2px;
     right:5px;
     background:none;
