@@ -1,18 +1,23 @@
 window.launchReverseDCF = function () { 
+  if (window.location.hostname !== 'www.screener.in') {
+    alert('This feature only works with https://www.screener.in/');
+    return;
+  }
+
   if (document.getElementById('myBookmarkletPopup')) return;
 
   const popup = document.createElement('div');
   popup.id = 'myBookmarkletPopup';
   popup.style = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 99999;
-    background: #fff;
-    border: 1px solid #ccc;
-    padding: 10px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    position:fixed;
+    top:20px;
+    right:20px;
+    z-index:99999;
+    background:#fff;
+    border:1px solid #ccc;
+    padding:10px;
+    border-radius:8px;
+    box-shadow:0 2px 10px rgba(0,0,0,0.2)
   `;
 
   const labels = ['P/E', 'P/BV', 'EV/EBITDA'];
@@ -22,40 +27,52 @@ window.launchReverseDCF = function () {
     if (label === 'P/E') {
       n = Array.from(document.querySelectorAll('#profit-loss table.data-table tbody tr'))
         .find(r => r.cells[0].innerText.includes('Net Profit'))
-        ?.querySelectorAll('td:last-child')[0]?.innerText?.replaceAll(',', '');
+        ?.querySelectorAll('td:last-child')[0]
+        ?.innerText
+        ?.replaceAll(',', '');
 
       m = document.querySelector('#top-ratios li')
         ?.getElementsByClassName('value')[0]
         ?.getElementsByClassName('number')[0]
-        ?.innerText?.replaceAll(',', '');
-
+        ?.innerText
+        ?.replaceAll(',', '');
     } else if (label === 'P/BV') {
       m = document.querySelectorAll('#top-ratios li')[1]
         ?.getElementsByClassName('value')[0]
         ?.getElementsByClassName('number')[0]
-        ?.innerText?.replaceAll(',', '');
+        ?.innerText
+        ?.replaceAll(',', '');
 
       n = document.querySelectorAll('#top-ratios li')[4]
         ?.getElementsByClassName('value')[0]
         ?.getElementsByClassName('number')[0]
-        ?.innerText?.replaceAll(',', '');
+        ?.innerText
+        ?.replaceAll(',', '');
 
       m1 = 4; m2 = 4; m3 = 5;
-
     } else if (label === 'EV/EBITDA') {
       const allRatios = document.querySelectorAll('#top-ratios li');
+      let enterpriseValueFound = false;
 
       for (let indx = 0; indx <= allRatios.length; ++indx) {
         const elem = document.querySelectorAll("#top-ratios li")[indx];
         if (elem?.getElementsByClassName("name")?.[0]?.innerText === "Enterprise Value") {
           m = elem?.getElementsByClassName("value")?.[0]?.innerText?.match(/[\d,]+/)[0].replace(/,/g, '');
+          enterpriseValueFound = true;
           break;
         }
       }
 
+      if (!enterpriseValueFound || m === undefined || m === null) {
+        alert('Please add "Enterprise value" quick ratio');
+        return;
+      }
+
       n = Array.from(document.querySelectorAll('#profit-loss table.data-table tbody tr'))
         .find(r => r.cells[0].innerText.includes('Operating Profit'))
-        ?.querySelectorAll('td:last-child')[0]?.innerText?.replaceAll(',', '');
+        ?.querySelectorAll('td:last-child')[0]
+        ?.innerText
+        ?.replaceAll(',', '');
 
       m1 = 15; m2 = 15; m3 = 18;
     }
