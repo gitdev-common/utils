@@ -1,4 +1,4 @@
-(function () {
+window.launchReverseDCF = function () { 
   if (document.getElementById('myBookmarkletPopup')) return;
 
   const popup = document.createElement('div');
@@ -120,4 +120,4 @@
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js';
     document.head.appendChild(s);
   }
-})();
+}
