@@ -1,4 +1,4 @@
-(function () {
+window.launchScreenerEnhancement = function () { 
   if (window.calculationsApplied) {
     alert('Calculations have already been applied.');
     return;
@@ -267,4 +267,4 @@
   cashFlowTable.parentElement.insertBefore(sumButton, cashFlowTable);
 
   window.calculationsApplied = true;
-})();
+}
