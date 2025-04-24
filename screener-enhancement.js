@@ -3,7 +3,7 @@ window.launchScreenerEnhancement = function () {
     alert('Calculations have already been applied.');
     return;
   }
-
+  injectStyles();
   const ROWS_TO_SELECT = ['Revenue', 'Sales', 'Operating Profit', 'Financing Profit', 'Net Profit'];
 
   const table = document.getElementById('profit-loss');
@@ -53,6 +53,21 @@ window.launchScreenerEnhancement = function () {
 };
 
 // Utility Functions
+
+function injectStyles() {
+  if (document.getElementById('growth-popover-style')) return;
+
+  const style = document.createElement('style');
+  style.id = 'growth-popover-style';
+  style.textContent = `
+  .highlight-popover {
+    outline: 2px solid #ffc107;
+    background: #333 !important;
+    z-index: 10;
+  }
+`;
+  document.head.appendChild(style);
+}
 
 function showAlert(message) {
   alert(message);
@@ -105,7 +120,7 @@ function createPopover(text, growth) {
     borderRadius: '4px',
     top: '-10px',
     right: '0px',
-    pointerEvents: 'none',
+    pointerEvents: 'auto',
   });
   return popover;
 }
@@ -304,27 +319,52 @@ function addGrowthPopovers(rows) {
   });
 }
 
+function highlightPopover(id, highlight) {
+  const popover = document.getElementById(id);
+  if (popover) {
+    popover.classList.toggle('highlight-popover', highlight);
+  }
+}
+
 function addYoYGrowthPopovers(rows, halfYearlyResults) {
   clearPopovers(rows);
   const startIndex = halfYearlyResults ? 3 : 5;
   const columnComparisonIndex = halfYearlyResults ? 2 : 4;
 
-  rows.forEach((row) => {
+  rows.forEach((row, rowIndex) => {
     const numericValues = Array.from(row.cells).map((cell) =>
       parseFloat(cell.textContent.replace(/[^0-9.-]+/g, '')),
     );
 
     for (let i = startIndex; i < numericValues.length; i++) {
-      const prev = numericValues[i - columnComparisonIndex],
-        curr = numericValues[i];
+      const prevIndex = i - columnComparisonIndex;
+      const prev = numericValues[prevIndex];
+      const curr = numericValues[i];
+
       if (isNaN(prev) || isNaN(curr) || prev === 0) continue;
 
       const growth = ((curr - prev) / Math.abs(prev)) * 100;
-      const cell = row.cells[i];
+      const currentCell = row.cells[i];
+
       const popover = createPopover(`${growth.toFixed(2)}%`, growth);
-      removeExistingPopover(cell);
-      cell.style.position = 'relative';
-      cell.appendChild(popover);
+      const popoverId = `popover-${rowIndex}-${i}`;
+      const prevPopoverId = `popover-${rowIndex}-${prevIndex}`;
+
+      popover.id = popoverId;
+
+      popover.addEventListener('mouseenter', () => {
+        highlightPopover(popoverId, true);
+        highlightPopover(prevPopoverId, true);
+      });
+
+      popover.addEventListener('mouseleave', () => {
+        highlightPopover(popoverId, false);
+        highlightPopover(prevPopoverId, false);
+      });
+
+      removeExistingPopover(currentCell);
+      currentCell.style.position = 'relative';
+      currentCell.appendChild(popover);
     }
   });
 }
