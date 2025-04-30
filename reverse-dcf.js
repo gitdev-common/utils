@@ -25,11 +25,21 @@ window.launchReverseDCF = function () {
 
   function updateValues(label) {
     if (label === 'P/E') {
-      n = Array.from(document.querySelectorAll('#profit-loss table.data-table tbody tr'))
-        .find(r => r.cells[0].innerText.includes('Net Profit'))
-        ?.querySelectorAll('td:last-child')[0]
-        ?.innerText
-        ?.replaceAll(',', '');
+      const excludeOtherIncome = document.getElementById('excludeOtherIncomeCheckbox')?.checked;
+      
+      const rows = Array.from(document.querySelectorAll('#profit-loss table.data-table tbody tr'));
+      const netProfitRow = rows.find(r => r.cells[0].innerText.includes('Net Profit'));
+      const otherIncomeRow = rows.find(r => r.cells[0].innerText.includes('Other Income'));
+
+      let netProfit = parseFloat(
+        netProfitRow?.querySelectorAll('td:last-child')[0]?.innerText?.replaceAll(',', '') || '0'
+      );
+
+      const otherIncome = parseFloat(
+        otherIncomeRow?.querySelectorAll('td:last-child')[0]?.innerText?.replaceAll(',', '') || '0'
+      );
+
+      n = (excludeOtherIncome ? (netProfit - otherIncome) : netProfit).toString();
 
       m = document.querySelector('#top-ratios li')
         ?.getElementsByClassName('value')[0]
@@ -99,9 +109,18 @@ window.launchReverseDCF = function () {
     font-size:16px;
     cursor:pointer;
     color:#888;
+    transform: scale(1.4)
   `;
   closeBtn.onclick = () => cleanup();
   popup.appendChild(closeBtn);
+
+   const excludeOtherIncomeCheckbox = document.createElement('div');
+  excludeOtherIncomeCheckbox.style = 'display:block;margin-top:10px;font-size:14px;padding-left: 8px;';
+  excludeOtherIncomeCheckbox.innerHTML = `
+    <input type="checkbox" id="excludeOtherIncomeCheckbox" style="margin-right:5px; transform: scale(1.3)" />
+    Exclude other income
+  `;
+  popup.appendChild(excludeOtherIncomeCheckbox);
 
   document.body.appendChild(popup);
 
