@@ -103,15 +103,29 @@ window.launchScreenerEnhancement = function () {
       getLatestValueFromTable('#profit-loss', 'Financing Margin %'),
   );
 
+  const latestDepreciation = parseFloat(getLatestValueFromTable('#profit-loss', 'Depreciation'));
+  const latestInterestCost = parseFloat(getLatestValueFromTable('#profit-loss', 'Interest'));
+  const otherCosts = latestDepreciation + latestInterestCost;
+
   const shareCapital = getLatestValueFromTable('#balance-sheet', 'Equity Capital');
   const reserves = getLatestValueFromTable('#balance-sheet', 'Reserves');
   const netWorth = parseFloat(shareCapital) + parseFloat(reserves);
 
   const { value: marketCap } = getQuickRatio('Market Cap');
+  const { value: stockPE } = getQuickRatio('Stock P/E');
+  const { value: evEbitda } = getQuickRatio('EVEBITDA');
 
   const finModellingBtn = getContainerButton('Financial modelling');
   finModellingBtn.addEventListener('click', () => {
-    showFinancialModelModal(latestRevenue, marketCap, latestOpm, netWorth);
+    showFinancialModelModal(
+      latestRevenue,
+      marketCap,
+      latestOpm,
+      netWorth,
+      otherCosts,
+      stockPE,
+      evEbitda,
+    );
   });
   pnlTable.parentElement.insertBefore(finModellingBtn, pnlTable);
 
@@ -224,7 +238,7 @@ function createPopover(text, growth) {
     padding: '2px 4px',
     borderRadius: '4px',
     top: '-10px',
-    right: '0px',
+    right: '2px',
     pointerEvents: 'auto',
   });
   return popover;
@@ -1107,7 +1121,6 @@ function createDrawerWithLayoutToggle() {
   content.innerHTML = '';
   content.appendChild(headerDiv);
 
-  // content.appendChild(toggleLayoutBtn);
   drawer.appendChild(handle);
   drawer.appendChild(content);
 
@@ -1193,7 +1206,7 @@ function createDrawerWithLayoutToggle() {
     }
 
     if (isOpening) {
-      loadDrawerScript('https://cdn.jsdelivr.net/gh/gitdev-common/utils@1.0.12/screener-guide.min.js')
+      loadDrawerScript('https://cdn.jsdelivr.net/gh/gitdev-common/utils@1.0.11/screener-guide.js')
         .then(() => {
           window.guideInfoLoaded = true;
         })
@@ -1212,6 +1225,9 @@ function showFinancialModelModal(
   currentMCap,
   currentEbitdaMargin,
   currentNetWorth,
+  currentOtherCosts = 30,
+  currentStockPE = 20,
+  currentEvEbitda = 15,
 ) {
   const content = getFinancialModelHTML(currentRevenue, currentMCap, currentNetWorth);
   createModal({
@@ -1241,6 +1257,24 @@ function showFinancialModelModal(
               : s === 'Bull'
               ? currentEbitdaMargin + 2
               : currentEbitdaMargin - 2;
+          const otherCosts =
+            s === 'Base'
+              ? currentOtherCosts
+              : s === 'Bull'
+              ? (0.9 * currentOtherCosts).toFixed(1)
+              : (1.1 * currentOtherCosts).toFixed(1);
+          const stockPE =
+            s === 'Base'
+              ? parseInt(currentStockPE)
+              : s === 'Bull'
+              ? parseInt(0.8 * currentStockPE)
+              : parseInt(1.2 * currentStockPE);
+          const evEbitda =
+            s === 'Base'
+              ? parseInt(currentEvEbitda)
+              : s === 'Bull'
+              ? parseInt(0.8 * currentEvEbitda)
+              : parseInt(1.2 * currentEvEbitda);
 
           const calcIcon = `<svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -1268,13 +1302,9 @@ function showFinancialModelModal(
                     </div>
                   </td>
                   <td><input type="number" id="${s}-ebitda" value="${ebitdaMargin}"></td>
-                  <td><input type="number" id="${s}-other" value="${
-              s === 'Bull' ? 10 : s === 'Base' ? 20 : 40
-            }"></td>
+                  <td><input type="number" id="${s}-other" value="${otherCosts}"></td>
                   <td><input type="number" id="${s}-tax" value="26"></td>
-                  <td><input type="number" id="${s}-pe" value="${
-              s === 'Bull' ? 30 : s === 'Base' ? 25 : 20
-            }"></td>
+                  <td><input type="number" id="${s}-pe" value="${stockPE}"></td>
                 </tr>`;
           }
 
@@ -1295,9 +1325,7 @@ function showFinancialModelModal(
                     </div>
                     </td>
                   <td><input type="number" id="${s}-ebitda" value="${ebitdaMargin}"></td>
-                  <td><input type="number" id="${s}-evEbitda" value="${
-              s === 'Bull' ? 25 : s === 'Base' ? 20 : 15
-            }"></td>
+                  <td><input type="number" id="${s}-evEbitda" value="${evEbitda}"></td>
                 </tr>`;
           }
 
