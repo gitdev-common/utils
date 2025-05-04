@@ -1,6 +1,6 @@
 const checklistData = [
     {
-      title: 'Generals',
+      title: 'General',
       anchor: '#top',
       items: [
         {
