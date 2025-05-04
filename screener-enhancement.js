@@ -1193,7 +1193,7 @@ function createDrawerWithLayoutToggle() {
     }
 
     if (isOpening) {
-      loadDrawerScript('https://cdn.jsdelivr.net/gh/gitdev-common/utils@1.0.11/screener-guide.js')
+      loadDrawerScript('https://cdn.jsdelivr.net/gh/gitdev-common/utils@1.0.12/screener-guide.min.js')
         .then(() => {
           window.guideInfoLoaded = true;
         })
