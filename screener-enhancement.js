@@ -142,7 +142,7 @@ function createSectionInfoLabel() {
 function getLatestValueFromTable(tableId, rowLabel, asIs = false) {
   const value = Array.from(document.querySelectorAll(`${tableId} table.data-table tbody tr`))
     .find((r) => r.cells[0].innerText.includes(rowLabel))
-    ?.querySelectorAll('td:last-child')[0]
+    ?.querySelectorAll('td:last-child')?.[0]
     ?.innerText?.split('\n')?.[0];
 
   return asIs ? value : value?.replaceAll(/[,|%]/g, '');
@@ -160,7 +160,7 @@ function getQuickRatio(ratioLabel, asIs = false) {
         ? elem?.getElementsByClassName('value')?.[0]?.innerText
         : elem
             ?.getElementsByClassName('value')?.[0]
-            ?.innerText?.match(/[\d,.]+/)[0]
+            ?.innerText?.match(/[\d,.]+/)?.[0]
             ?.replace(/,/g, '');
       notFound = false;
       break;
@@ -1267,14 +1267,14 @@ function showFinancialModelModal(
             s === 'Base'
               ? parseInt(currentStockPE)
               : s === 'Bull'
-              ? parseInt(0.8 * currentStockPE)
-              : parseInt(1.2 * currentStockPE);
+              ? parseInt(1.2 * currentStockPE)
+              : parseInt(0.8 * currentStockPE);
           const evEbitda =
             s === 'Base'
               ? parseInt(currentEvEbitda)
               : s === 'Bull'
-              ? parseInt(0.8 * currentEvEbitda)
-              : parseInt(1.2 * currentEvEbitda);
+              ? parseInt(1.2 * currentEvEbitda)
+              : parseInt(0.8 * currentEvEbitda);
 
           const calcIcon = `<svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -1335,9 +1335,9 @@ function showFinancialModelModal(
                   <td>${s}</td>
                   <td>
                   <div style="display: flex; align-items: center;">
-                      <input type="number" id="${s}-rev" value="${revGrowth}">
+                      <input type="number" id="${s}-networthGrowth" value="${revGrowth}">
                       <div style="display: flex; align-items: center; margin-left: 8px; cursor: pointer;" onclick="openCAGRCalculator(
-                        '${s}-rev',
+                        '${s}-networthGrowth',
                           document.getElementById('networth').value,
                           document.getElementById('years').value
                       )">
@@ -1399,10 +1399,12 @@ function showFinancialModelModal(
 
     document.getElementById('calculate-btn')?.addEventListener('click', () => {
       const rev = parseFloat(document.getElementById('rev').value);
-      const mcap = parseFloat(document.getElementById('mcap').value);
+      const mcapVal = parseFloat(document.getElementById('mcap').value);
       const years = parseInt(document.getElementById('years').value);
       const netWorth = document.getElementById('networth').value;
       const method = document.getElementById('valuation-method').value;
+      const qip = document.getElementById('qip').value;
+      const mcap = mcapVal + (qip ? parseFloat(qip) : 0);
 
       const results = [];
 
@@ -1564,6 +1566,10 @@ function getFinancialModelHTML(currentRevenue, currentMCap, currentNetWorth = 0)
           <div>
             <label>Current MCap:</label>
             <input type="number" id="mcap" value="${currentMCap}">
+          </div>
+             <div>
+            <label>QIP (If any):</label>
+            <input type="number" id="qip" value="0">
           </div>
           <div>
             <label>Current Revenue:</label>
