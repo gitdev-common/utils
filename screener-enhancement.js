@@ -41,10 +41,10 @@ window.launchScreenerEnhancement = function () {
     getQuickRatio('Pledged percentage');
 
   if (document.querySelector('#shareholding')) {
-    const totalPromoter = getLatestValueFromTable('#shareholding', 'Promoter');
+    const totalPromoter = getLatestValueFromTable('#shareholding', 'Promoter') ?? 0;
     const pledgedInfoDiv = createSectionInfoLabel();
 
-    const pledgedValue = ((pledgedPercentage / 100) * totalPromoter).toFixed(2);
+    const pledgedValue = totalPromoter ? ((pledgedPercentage / 100) * totalPromoter).toFixed(2) : 0;
     if (!pledgeNotFound) {
       pledgedInfoDiv.textContent = `Pledged: ${pledgedPercentage}% (${pledgedValue}% / ${totalPromoter}%)`;
     } else {
@@ -113,6 +113,7 @@ window.launchScreenerEnhancement = function () {
 
   const { value: marketCap } = getQuickRatio('Market Cap');
   const { value: stockPE } = getQuickRatio('Stock P/E');
+  const { value: enterpriseValue } = getQuickRatio('Enterprise Value');
   const { value: evEbitda } = getQuickRatio('EVEBITDA');
 
   const finModellingBtn = getContainerButton('Financial modelling');
@@ -122,6 +123,7 @@ window.launchScreenerEnhancement = function () {
       marketCap,
       latestOpm,
       netWorth,
+      enterpriseValue,
       otherCosts,
       stockPE,
       evEbitda,
@@ -1225,16 +1227,22 @@ function showFinancialModelModal(
   currentMCap,
   currentEbitdaMargin,
   currentNetWorth,
+  currentEnterpriseValue = 0,
   currentOtherCosts = 30,
   currentStockPE = 20,
   currentEvEbitda = 15,
 ) {
-  const content = getFinancialModelHTML(currentRevenue, currentMCap, currentNetWorth);
+  const content = getFinancialModelHTML(
+    currentRevenue,
+    currentMCap,
+    currentNetWorth,
+    currentEnterpriseValue,
+  );
   createModal({
     title: 'Financial Modelling (Bull / Base / Bear)',
     content,
     isHTML: true,
-    maxWidth: '1000px',
+    maxWidth: '1200px',
   });
 
   function calculateGrowthMultiple(cagrPercent, years) {
@@ -1395,16 +1403,19 @@ function showFinancialModelModal(
 
     methodSelector.addEventListener('change', () => {
       renderScenarioTable(methodSelector.value);
+      document.getElementById('results').innerHTML = '';
     });
 
     document.getElementById('calculate-btn')?.addEventListener('click', () => {
       const rev = parseFloat(document.getElementById('rev').value);
       const mcapVal = parseFloat(document.getElementById('mcap').value);
       const years = parseInt(document.getElementById('years').value);
+      const entValue = parseFloat(document.getElementById('enterpriseValue').value || 0);
       const netWorth = document.getElementById('networth').value;
       const method = document.getElementById('valuation-method').value;
-      const qip = document.getElementById('qip').value;
-      const mcap = mcapVal + (qip ? parseFloat(qip) : 0);
+      const qip = parseFloat(document.getElementById('qip').value || 0);
+      const mcap = mcapVal + qip;
+      const enterpriseValue = entValue + qip;
 
       const results = [];
 
@@ -1423,6 +1434,7 @@ function showFinancialModelModal(
           const nopat = (ebitda - otherCostVal) * (1 - taxPct);
           futureMCap = nopat * pe;
           const cagr = (Math.pow(futureMCap / mcap, 1 / years) - 1) * 100;
+          const forwardMultiple = (mcap / nopat).toFixed(1);
 
           results.push({
             scenario: s,
@@ -1430,6 +1442,7 @@ function showFinancialModelModal(
             futurePAT: nopat.toFixed(0),
             futureMCap: futureMCap.toFixed(0),
             cagr: `${cagr.toFixed(2)} % (${calculateGrowthMultiple(cagr, years).toFixed(1)}x)`,
+            forwardMultiple,
           });
         } else if (method === 'ev_ebitda') {
           const revGrowth = parseFloat(document.getElementById(`${s}-rev`).value) / 100;
@@ -1439,7 +1452,8 @@ function showFinancialModelModal(
           const futureRevenue = rev * Math.pow(1 + revGrowth, years);
           const ebitda = futureRevenue * ebitdaMargin;
           futureMCap = ebitda * multiple;
-          const cagr = (Math.pow(futureMCap / mcap, 1 / years) - 1) * 100;
+          const cagr = (Math.pow(futureMCap / enterpriseValue, 1 / years) - 1) * 100;
+          const forwardMultiple = (enterpriseValue / ebitda).toFixed(1);
 
           results.push({
             scenario: s,
@@ -1447,30 +1461,33 @@ function showFinancialModelModal(
             futureEBITDA: ebitda.toFixed(0),
             futureMCap: futureMCap.toFixed(0),
             cagr: `${cagr.toFixed(2)} % (${calculateGrowthMultiple(cagr, years).toFixed(1)}x)`,
+            forwardMultiple,
           });
         } else if (method === 'pb') {
           const netWorthGrowthRate =
             parseFloat(document.getElementById(`${s}-networthGrowth`).value) / 100;
           const pb = parseFloat(document.getElementById(`${s}-pb`).value);
-          const futureNetWorth = netWorth * Math.pow(1 + netWorthGrowthRate, years);
+          const futureNetWorth = netWorth * Math.pow(1 + netWorthGrowthRate, years) + qip;
           futureMCap = futureNetWorth * pb;
           const cagr = (Math.pow(futureMCap / mcap, 1 / years) - 1) * 100;
+          const forwardMultiple = (mcap / futureNetWorth).toFixed(1);
 
           results.push({
             scenario: s,
             futureNetWorth: futureNetWorth.toFixed(0),
             futureMCap: futureMCap.toFixed(0),
             cagr: `${cagr.toFixed(2)} % (${calculateGrowthMultiple(cagr, years).toFixed(1)}x)`,
+            forwardMultiple,
           });
         }
       }
 
       const headers =
         method === 'pe'
-          ? ['Future Revenue', 'Future PAT']
+          ? ['Future Revenue', 'Future PAT (Fwd PE)', 'Future MCap']
           : method === 'ev_ebitda'
-          ? ['Future Revenue', 'Future EBITDA']
-          : ['Future Net Worth'];
+          ? ['Future Revenue', 'Future EBITDA (Fwd EV/EBITDA)', 'Future EV']
+          : ['Future Net Worth (Fwd PB)', 'Future MCap'];
 
       document.getElementById('results').innerHTML = `
           <h4>Results</h4>
@@ -1479,7 +1496,6 @@ function showFinancialModelModal(
               <tr>
                 <th>Scenario</th>
                 ${headers.map((h) => `<th>${h}</th>`).join('')}
-                <th>Future MCap</th>
                 <th>Expected CAGR</th>
               </tr>
             </thead>
@@ -1492,9 +1508,12 @@ function showFinancialModelModal(
                     ${headers
                       .map((h) => {
                         if (h.includes('Revenue')) return `<td>${r.futureRevenue}</td>`;
-                        if (h.includes('PAT')) return `<td>${r.futurePAT}</td>`;
-                        if (h.includes('EBITDA')) return `<td>${r.futureEBITDA}</td>`;
-                        if (h.includes('Net Worth')) return `<td>${r.futureNetWorth}</td>`;
+                        if (h.includes('PAT'))
+                          return `<td>${r.futurePAT} (Fwd: ${r.forwardMultiple})</td>`;
+                        if (h.includes('EBITDA'))
+                          return `<td>${r.futureEBITDA} (Fwd: ${r.forwardMultiple})</td>`;
+                        if (h.includes('Net Worth'))
+                          return `<td>${r.futureNetWorth} (Fwd: ${r.forwardMultiple})</td>`;
                         return '';
                       })
                       .join('')}
@@ -1509,7 +1528,12 @@ function showFinancialModelModal(
   }, 0);
 }
 
-function getFinancialModelHTML(currentRevenue, currentMCap, currentNetWorth = 0) {
+function getFinancialModelHTML(
+  currentRevenue,
+  currentMCap,
+  currentNetWorth = 0,
+  currentEnterpriseValue = 0,
+) {
   return `
       <div class="financial-model-content">
         <style>
@@ -1567,17 +1591,21 @@ function getFinancialModelHTML(currentRevenue, currentMCap, currentNetWorth = 0)
             <label>Current MCap:</label>
             <input type="number" id="mcap" value="${currentMCap}">
           </div>
-             <div>
-            <label>QIP (If any):</label>
-            <input type="number" id="qip" value="0">
+          <div>
+            <label>Current EV:</label>
+            <input type="number" id="enterpriseValue" value="${currentEnterpriseValue}">
+          </div>
+          <div>
+            <label>Current Net Worth:</label>
+            <input type="number" id="networth" value="${currentNetWorth}">
           </div>
           <div>
             <label>Current Revenue:</label>
             <input type="number" id="rev" value="${currentRevenue}">
           </div>
           <div>
-            <label>Current Net Worth:</label>
-            <input type="number" id="networth" value="${currentNetWorth}">
+            <label>QIP (If any):</label>
+            <input type="number" id="qip" value="0">
           </div>
           <div>
             <label>Years:</label>
