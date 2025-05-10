@@ -209,6 +209,15 @@ function getSelectedRows(table, keywords) {
   });
 }
 
+function getFormattedHeaderCellText(headerCell) {
+  return Array.from(headerCell.childNodes)
+    ?.filter((node) => node.nodeType === Node.TEXT_NODE)
+    ?.map((node) => node.textContent.trim())
+    ?.join(' ')
+    ?.trim()
+    ?.toLowerCase();
+}
+
 function transferRowsToCashFlow(selectedRows, headerCells, cashFlowHeaders, cashFlowBody) {
   selectedRows.forEach((row) => {
     const newRow = cashFlowBody.insertRow(0);
@@ -217,7 +226,7 @@ function transferRowsToCashFlow(selectedRows, headerCells, cashFlowHeaders, cash
 
     row.querySelectorAll('td').forEach((cell, index) => {
       if (index > 0) {
-        const headerText = headerCells[index]?.textContent.trim().toLowerCase();
+        const headerText = getFormattedHeaderCellText(headerCells[index]);
         const headerIndex = cashFlowHeaders.indexOf(headerText);
         if (headerIndex !== -1) {
           const newCell = newRow.insertCell();
@@ -234,7 +243,7 @@ function createPopover(text, growth) {
   popover.textContent = text;
   Object.assign(popover.style, {
     position: 'absolute',
-    background: growth >= 0 ? '#2e7d32' : '#c62828',
+    background: growth > 0 ? '#2e7d32' : '#c62828',
     color: '#fff',
     fontSize: '12px',
     padding: '2px 4px',
@@ -541,9 +550,9 @@ function addGrowthPopovers(rows) {
     for (let i = 2; i < numericValues.length; i++) {
       const prev = numericValues[i - 1],
         curr = numericValues[i];
-      if (isNaN(prev) || isNaN(curr) || prev === 0) continue;
+      if (isNaN(prev) || isNaN(curr)) continue;
 
-      const growth = ((curr - prev) / Math.abs(prev)) * 100;
+      const growth = ((curr - prev) / Math.abs(prev || 1)) * 100;
       const cell = row.cells[i];
       const popover = createPopover(`${growth.toFixed(2)}%`, growth);
       removeExistingPopover(cell);
@@ -575,9 +584,9 @@ function addYoYGrowthPopovers(rows, halfYearlyResults) {
       const prev = numericValues[prevIndex];
       const curr = numericValues[i];
 
-      if (isNaN(prev) || isNaN(curr) || prev === 0) continue;
+      if (isNaN(prev) || isNaN(curr)) continue;
 
-      const growth = ((curr - prev) / Math.abs(prev)) * 100;
+      const growth = ((curr - prev) / Math.abs(prev || 1)) * 100;
       const currentCell = row.cells[i];
 
       const popover = createPopover(`${growth.toFixed(2)}%`, growth);
