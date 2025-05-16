@@ -3,14 +3,23 @@ window.launchScreenerEnhancement = function () {
     alert('Calculations have already been applied.');
     return;
   }
+  window.unavailableRatios = [];
+
   injectStyles();
-  const ROWS_TO_SELECT = ['Revenue', 'Sales', 'Operating Profit', 'Financing Profit', 'Net Profit'];
+  const ROWS_TO_SELECT = [
+    'Revenue',
+    'Sales',
+    'Operating Profit',
+    'Financing Profit',
+    'Net Profit',
+    'EPS in Rs',
+  ];
+  const ROWS_FOR_GROWTH_TOOLTIP = ['EPS in Rs'];
 
   const pnlTable = document.getElementById('profit-loss');
   if (!pnlTable) return showAlert('Table with id "profit-loss" not found.');
 
   const headerCells = pnlTable.querySelectorAll('thead th');
-  const isTTM = checkIfTTMColumn(headerCells);
 
   const selectedRows = getSelectedRows(pnlTable, ROWS_TO_SELECT).reverse();
 
@@ -24,7 +33,7 @@ window.launchScreenerEnhancement = function () {
   const cashFlowBody = cashFlowTable.querySelector('tbody');
 
   transferRowsToCashFlow(selectedRows, headerCells, cashFlowHeaders, cashFlowBody);
-  addGrowthPopovers(selectedRows, isTTM);
+  addGrowthPopovers(selectedRows, ROWS_FOR_GROWTH_TOOLTIP);
   addCheckboxesToHeaders(cashFlowHeaderCells);
 
   addSumButton(cashFlowHeaderCells, cashFlowBody, cashFlowTable);
@@ -34,11 +43,15 @@ window.launchScreenerEnhancement = function () {
   const selectedQuarterlyRows = getSelectedRows(quartyerlyTable, ROWS_TO_SELECT).reverse();
   const areResultsHalfYearly = quartyerlyTable.textContent?.includes('Half Yearly Results');
 
-  window.growthMode = 'qoq';
-  addGrowthPopovers(selectedQuarterlyRows, isTTM);
+  window.growthMode = 'yoy';
+  addYoYGrowthPopovers(selectedQuarterlyRows, areResultsHalfYearly, ROWS_FOR_GROWTH_TOOLTIP);
 
   const { value: pledgedPercentage, notFound: pledgeNotFound } =
     getQuickRatio('Pledged percentage');
+
+  if (pledgeNotFound) {
+    window.unavailableRatios.push('Pledged percentage');
+  }
 
   if (document.querySelector('#shareholding')) {
     const totalPromoter = getLatestValueFromTable('#shareholding', 'Promoter') ?? 0;
@@ -60,6 +73,10 @@ window.launchScreenerEnhancement = function () {
     'Cont Liab',
     true,
   );
+  if (contingentLiabilitiesNotFound) {
+    window.unavailableRatios.push('Contingent Liabilities');
+  }
+
   const contingentLiabilitiesDiv = createSectionInfoLabel();
   contingentLiabilitiesDiv.style.marginRight = '24px';
 
@@ -78,14 +95,14 @@ window.launchScreenerEnhancement = function () {
       );
   }
 
-  const toggleBtn = getContainerButton('Viewing QoQ');
+  const toggleBtn = getContainerButton(window.growthMode === 'qoq' ? 'Viewing QoQ' : 'Viewing YoY');
   toggleBtn.addEventListener('click', () => {
     window.growthMode = window.growthMode === 'qoq' ? 'yoy' : 'qoq';
     toggleBtn.textContent = window.growthMode === 'qoq' ? 'Viewing QoQ' : 'Viewing YoY';
     if (window.growthMode === 'qoq') {
-      addGrowthPopovers(selectedQuarterlyRows, isTTM);
+      addGrowthPopovers(selectedQuarterlyRows, ROWS_FOR_GROWTH_TOOLTIP);
     } else {
-      addYoYGrowthPopovers(selectedQuarterlyRows, areResultsHalfYearly);
+      addYoYGrowthPopovers(selectedQuarterlyRows, areResultsHalfYearly, ROWS_FOR_GROWTH_TOOLTIP);
     }
   });
   quartyerlyTable.parentElement.insertBefore(toggleBtn, quartyerlyTable);
@@ -113,8 +130,15 @@ window.launchScreenerEnhancement = function () {
 
   const { value: marketCap } = getQuickRatio('Market Cap');
   const { value: stockPE } = getQuickRatio('Stock P/E');
-  const { value: enterpriseValue } = getQuickRatio('Enterprise Value');
-  const { value: evEbitda } = getQuickRatio('EVEBITDA');
+  const { value: enterpriseValue, notFound: evNotFound } = getQuickRatio('Enterprise Value');
+  const { value: evEbitda, notFound: evEbitdaNotFound } = getQuickRatio('EVEBITDA');
+
+  if (evNotFound) {
+    window.unavailableRatios.push('Enterprise Value');
+  }
+  if (evEbitdaNotFound) {
+    window.unavailableRatios.push('EV/EBITDA');
+  }
 
   const finModellingBtn = getContainerButton('Financial modelling');
   finModellingBtn.addEventListener('click', () => {
@@ -132,6 +156,17 @@ window.launchScreenerEnhancement = function () {
   pnlTable.parentElement.insertBefore(finModellingBtn, pnlTable);
 
   window.calculationsApplied = true;
+  if (window.unavailableRatios.length) {
+    createModal({
+      title: 'Missing Quick Ratios',
+      content: `<div style="color: #c62828; font-size: 16px; margin-top: 16px;">
+      <ul>
+        ${window.unavailableRatios.map((ratio) => `<li>${ratio}</li>`).join('')}
+      </ul>
+      </div>`,
+      isHTML: true,
+    });
+  }
 };
 
 function createSectionInfoLabel() {
@@ -185,6 +220,7 @@ function injectStyles() {
       outline: 1px solid #ffc107;
       background: #333 !important;
       z-index: 10;
+      opacity: 1 !important;
     }
   `;
   document.head.appendChild(style);
@@ -192,11 +228,6 @@ function injectStyles() {
 
 function showAlert(message) {
   alert(message);
-}
-
-function checkIfTTMColumn(headerCells) {
-  const lastHeader = headerCells[headerCells.length - 1];
-  return lastHeader?.textContent.trim().toLowerCase() === 'ttm';
 }
 
 function getSelectedRows(table, keywords) {
@@ -539,12 +570,16 @@ function createModal({ title = 'Modal Title', content = '', isHTML = false, maxW
   return overlay;
 }
 
-function addGrowthPopovers(rows) {
+function addGrowthPopovers(rows, rowsForTooltipOnly) {
   clearPopovers(rows);
 
   rows.forEach((row) => {
     const numericValues = Array.from(row.cells).map((cell) =>
       parseFloat(cell.textContent.replace(/[^0-9.-]+/g, '')),
+    );
+
+    const placeOnlyTooltip = rowsForTooltipOnly.some((r) =>
+      row.cells?.[0]?.textContent?.trim()?.startsWith(r),
     );
 
     for (let i = 2; i < numericValues.length; i++) {
@@ -554,10 +589,15 @@ function addGrowthPopovers(rows) {
 
       const growth = ((curr - prev) / Math.abs(prev || 1)) * 100;
       const cell = row.cells[i];
-      const popover = createPopover(`${growth.toFixed(2)}%`, growth);
       removeExistingPopover(cell);
       cell.style.position = 'relative';
-      cell.appendChild(popover);
+
+      if (!placeOnlyTooltip) {
+        const popover = createPopover(`${growth.toFixed(2)}%`, growth);
+        cell.appendChild(popover);
+      } else {
+        cell.setAttribute('data-tooltip', `${growth.toFixed(2)}%`);
+      }
     }
   });
 }
@@ -569,7 +609,7 @@ function highlightPopover(id, highlight) {
   }
 }
 
-function addYoYGrowthPopovers(rows, halfYearlyResults) {
+function addYoYGrowthPopovers(rows, halfYearlyResults, rowsForTooltipOnly) {
   clearPopovers(rows);
   const startIndex = halfYearlyResults ? 3 : 5;
   const columnComparisonIndex = halfYearlyResults ? 2 : 4;
@@ -579,34 +619,51 @@ function addYoYGrowthPopovers(rows, halfYearlyResults) {
       parseFloat(cell.textContent.replace(/[^0-9.-]+/g, '')),
     );
 
-    for (let i = startIndex; i < numericValues.length; i++) {
+    const placeOnlyTooltip = rowsForTooltipOnly.some((r) =>
+      row.cells?.[0]?.textContent?.trim()?.startsWith(r),
+    );
+
+    for (let i = 1; i < numericValues.length; i++) {
       const prevIndex = i - columnComparisonIndex;
-      const prev = numericValues[prevIndex];
       const curr = numericValues[i];
-
-      if (isNaN(prev) || isNaN(curr)) continue;
-
-      const growth = ((curr - prev) / Math.abs(prev || 1)) * 100;
+      const prev = numericValues[prevIndex];
       const currentCell = row.cells[i];
-
-      const popover = createPopover(`${growth.toFixed(2)}%`, growth);
-      const popoverId = `popover-${rowIndex}-${i}`;
-      const prevPopoverId = `popover-${rowIndex}-${prevIndex}`;
-
-      popover.id = popoverId;
-
-      popover.addEventListener('mouseenter', () => {
-        highlightPopover(popoverId, true);
-        highlightPopover(prevPopoverId, true);
-      });
-
-      popover.addEventListener('mouseleave', () => {
-        highlightPopover(popoverId, false);
-        highlightPopover(prevPopoverId, false);
-      });
 
       removeExistingPopover(currentCell);
       currentCell.style.position = 'relative';
+
+      const popoverId = `popover-${rowIndex}-${i}`;
+      const prevPopoverId = `popover-${rowIndex}-${prevIndex}`;
+
+      if (placeOnlyTooltip && i >= startIndex && !isNaN(prev) && !isNaN(curr)) {
+        const growth = ((curr - prev) / Math.abs(prev || 1)) * 100;
+        currentCell.setAttribute('data-tooltip', `${growth.toFixed(2)}%`);
+        continue;
+      }
+
+      let popover;
+      if (i < startIndex || isNaN(prev) || isNaN(curr)) {
+        popover = createPopover('', 0);
+        popover.style.opacity = '0';
+        popover.style.width = '18px';
+        popover.style.height = '13px';
+        popover.style.pointerEvents = 'none';
+      } else {
+        const growth = ((curr - prev) / Math.abs(prev || 1)) * 100;
+        popover = createPopover(`${growth.toFixed(2)}%`, growth);
+
+        popover.addEventListener('mouseenter', () => {
+          highlightPopover(popoverId, true);
+          highlightPopover(prevPopoverId, true);
+        });
+
+        popover.addEventListener('mouseleave', () => {
+          highlightPopover(popoverId, false);
+          highlightPopover(prevPopoverId, false);
+        });
+      }
+
+      popover.id = popoverId;
       currentCell.appendChild(popover);
     }
   });
