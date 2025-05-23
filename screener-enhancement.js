@@ -32,6 +32,8 @@ window.launchScreenerEnhancement = function () {
   );
   const cashFlowBody = cashFlowTable.querySelector('tbody');
 
+  addPATMarginRow('quarters');
+  addPATMarginRow('profit-loss');
   transferRowsToCashFlow(selectedRows, headerCells, cashFlowHeaders, cashFlowBody);
   addGrowthPopovers(selectedRows, ROWS_FOR_GROWTH_TOOLTIP);
   addCheckboxesToHeaders(cashFlowHeaderCells);
@@ -160,14 +162,61 @@ window.launchScreenerEnhancement = function () {
     createModal({
       title: 'Missing Quick Ratios',
       content: `<div style="color: #c62828; font-size: 16px; margin-top: 16px;">
-      <ul>
-        ${window.unavailableRatios.map((ratio) => `<li>${ratio}</li>`).join('')}
-      </ul>
-      </div>`,
+        <ul>
+          ${window.unavailableRatios.map((ratio) => `<li>${ratio}</li>`).join('')}
+        </ul>
+        </div>`,
       isHTML: true,
     });
   }
 };
+
+function addPATMarginRow(tableId) {
+  const pnlTable = document.getElementById(tableId);
+  if (!pnlTable) return showAlert(`Table with id "${tableId}" not found.`);
+
+  const tableBody = pnlTable.querySelector('tbody');
+  const rows = Array.from(tableBody.querySelectorAll('tr'));
+
+  const salesRow = rows.find((row) =>
+    ['sales', 'revenue'].some((keyword) =>
+      row.cells[0]?.textContent.trim().toLowerCase().startsWith(keyword),
+    ),
+  );
+  const netProfitRow = rows.find((row) =>
+    row.cells[0]?.textContent.trim().toLowerCase().startsWith('net profit'),
+  );
+
+  if (!salesRow || !netProfitRow) {
+    return showAlert('Sales/Revenue or Net Profit row not found.');
+  }
+
+  const salesValues = Array.from(salesRow.cells)
+    .slice(1)
+    .map((cell) => parseFloat(cell.textContent.replace(/[^0-9.-]+/g, '')) || 0);
+  const netProfitValues = Array.from(netProfitRow.cells)
+    .slice(1)
+    .map((cell) => parseFloat(cell.textContent.replace(/[^0-9.-]+/g, '')) || 0);
+
+  const patMarginValues = netProfitValues.map((pat, index) => {
+    const sales = salesValues[index];
+    return sales ? ((pat / sales) * 100).toFixed(2) + '%' : '-';
+  });
+
+  const patMarginRow = document.createElement('tr');
+  const labelCell = document.createElement('td');
+  labelCell.textContent = 'PAT Margin %';
+  labelCell.className = 'text';
+  patMarginRow.appendChild(labelCell);
+
+  patMarginValues.forEach((value) => {
+    const cell = document.createElement('td');
+    cell.textContent = value;
+    patMarginRow.appendChild(cell);
+  });
+
+  netProfitRow.parentNode.insertBefore(patMarginRow, netProfitRow.nextSibling);
+}
 
 function createSectionInfoLabel() {
   return Object.assign(document.createElement('div'), {
@@ -216,13 +265,13 @@ function injectStyles() {
   const style = document.createElement('style');
   style.id = 'growth-popover-style';
   style.textContent = `
-    .highlight-popover {
-      outline: 1px solid #ffc107;
-      background: #333 !important;
-      z-index: 10;
-      opacity: 1 !important;
-    }
-  `;
+      .highlight-popover {
+        outline: 1px solid #ffc107;
+        background: #333 !important;
+        z-index: 10;
+        opacity: 1 !important;
+      }
+    `;
   document.head.appendChild(style);
 }
 
@@ -412,7 +461,7 @@ async function sumSelectedColumns(headerCells, tableBody) {
 
   if (selectedIndexes.length === 0) return showAlert('No headers selected!');
 
-  await expandCellAndWaitForContent('#cash-flow', 'Cash from Operating Activity', 'Receivables');
+  await expandCellAndWaitForContent('#cash-flow', 'Cash from Operating Activity', 'Other WC items');
   await expandCellAndWaitForContent(
     '#cash-flow',
     'Cash from Investing Activity',
@@ -497,15 +546,15 @@ async function sumSelectedColumns(headerCells, tableBody) {
         row.label?.startsWith('Cash from Operating Activity') ||
         row.label?.startsWith('Net Profit');
       return `
-        <div style="font-weight: ${isLabelBold ? '600' : ''}; padding: 8px 4px; background: ${
+          <div style="font-weight: ${isLabelBold ? '600' : ''}; padding: 8px 4px; background: ${
         i % 2 === 0 ? 'rgb(248,248,255)' : ''
       }">${row.label}</div>
-        <div style="font-weight: ${
-          isLabelBold ? '600' : ''
-        }; text-align: right; padding: 8px 4px; background: ${
+          <div style="font-weight: ${
+            isLabelBold ? '600' : ''
+          }; text-align: right; padding: 8px 4px; background: ${
         i % 2 === 0 ? 'rgb(248,248,255)' : ''
       }">${row.total}</div>
-      `;
+        `;
     })
     .join('');
 
@@ -679,7 +728,7 @@ function clearPopovers(rows) {
 }
 
 async function addMoreRatiosToTable() {
-  await expandCellAndWaitForContent('#balance-sheet', 'Other Assets', 'Trade receivables');
+  await expandCellAndWaitForContent('#balance-sheet', 'Other Assets', 'Cash Equivalents');
 
   const balanceSheetSection = document.querySelector('#balance-sheet');
   const ratiosSection = document.querySelector('#ratios');
@@ -838,7 +887,7 @@ async function addMoreRatiosToTable() {
   function createReceivablesToSalesMap(headers, receivables, salesPerYearMap) {
     const receivablesToSalesMap = {};
     headers.slice(1).forEach((year, i) => {
-      const receivable = receivables[i];
+      const receivable = receivables[i] ?? 0;
       const sales = salesPerYearMap[year] ?? 0;
 
       receivablesToSalesMap[year] = {
@@ -1204,62 +1253,62 @@ function createDrawerWithLayoutToggle() {
   document.body.appendChild(pageWrapper);
 
   const styles = `
-        body {
-          margin: 0;
-          padding: 0;
-        }
-    
-        #drawer {
-          position: fixed;
-          top: 0;
-          left: -20%;
-          width: 20%;
-          height: 100%;
-          background: white;
-          box-shadow: 2px 0 4px rgba(0,0,0,0.2);
-          transition: left 0.3s ease, width 0.3s ease;
-          z-index: 9999;
-          font-family: sans-serif;
-        }
-    
-        #drawer.open {
-          left: 0;
-        }
-    
-        #drawer.expanded {
-          width: 20%;
-        }
-    
-        #drawer-handle {
-          position: absolute;
-          right: -30px;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 30px;
-          height: 60px;
-          background: white;
-          font-size: 20px;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 0 5px 5px 0;
-          box-shadow: 3px 0 4px rgba(0,0,0,0.2);
-        }
-    
-        #drawer-content {
-          padding: 20px;
-        }
-    
-        #page-wrapper {
-          transition: margin-left 0.3s ease, width 0.3s ease;
-        }
-    
-        #page-wrapper.shifted {
-          margin-left: 20%;
-          width: 80%;
-        }
-      `;
+          body {
+            margin: 0;
+            padding: 0;
+          }
+      
+          #drawer {
+            position: fixed;
+            top: 0;
+            left: -20%;
+            width: 20%;
+            height: 100%;
+            background: white;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.2);
+            transition: left 0.3s ease, width 0.3s ease;
+            z-index: 9999;
+            font-family: sans-serif;
+          }
+      
+          #drawer.open {
+            left: 0;
+          }
+      
+          #drawer.expanded {
+            width: 20%;
+          }
+      
+          #drawer-handle {
+            position: absolute;
+            right: -30px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 30px;
+            height: 60px;
+            background: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0 5px 5px 0;
+            box-shadow: 3px 0 4px rgba(0,0,0,0.2);
+          }
+      
+          #drawer-content {
+            padding: 20px;
+          }
+      
+          #page-wrapper {
+            transition: margin-left 0.3s ease, width 0.3s ease;
+          }
+      
+          #page-wrapper.shifted {
+            margin-left: 20%;
+            width: 80%;
+          }
+        `;
 
   const styleTag = document.createElement('style');
   styleTag.textContent = styles;
@@ -1351,78 +1400,78 @@ function showFinancialModelModal(
               : parseInt(0.8 * currentEvEbitda);
 
           const calcIcon = `<svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                fill="currentColor"
-                viewBox="0 0 16 16">
-                <path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM4 2.5v2a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0-.5.5zM4.5 6.5a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5V7a.5.5 0 0 0-.5-.5h-1zM7.5 6a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-5a.5.5 0 0 0-.5-.5h-1zM10.5 6.5a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 0-.5-.5h-1z" />
-              </svg>`;
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  fill="currentColor"
+                  viewBox="0 0 16 16">
+                  <path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM4 2.5v2a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0-.5.5zM4.5 6.5a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5V7a.5.5 0 0 0-.5-.5h-1zM7.5 6a.5.5 0 0 0-.5.5v5a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-5a.5.5 0 0 0-.5-.5h-1zM10.5 6.5a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 0-.5-.5h-1z" />
+                </svg>`;
 
           if (method === 'pe') {
             return `
-                <tr>
-                  <td>${s}</td>
-                  <td>
-                    <div style="display: flex; align-items: center;">
-                      <input type="number" id="${s}-rev" value="${revGrowth}">
-                      <div style="display: flex; align-items: center; margin-left: 8px; cursor: pointer;" onclick="openCAGRCalculator(
-                        '${s}-rev',
-                          document.getElementById('rev').value,
-                          document.getElementById('years').value
-                      )">
-                        ${calcIcon}
+                  <tr>
+                    <td>${s}</td>
+                    <td>
+                      <div style="display: flex; align-items: center;">
+                        <input type="number" id="${s}-rev" value="${revGrowth}">
+                        <div style="display: flex; align-items: center; margin-left: 8px; cursor: pointer;" onclick="openCAGRCalculator(
+                          '${s}-rev',
+                            document.getElementById('rev').value,
+                            document.getElementById('years').value
+                        )">
+                          ${calcIcon}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td><input type="number" id="${s}-ebitda" value="${ebitdaMargin}"></td>
-                  <td><input type="number" id="${s}-other" value="${otherCosts}"></td>
-                  <td><input type="number" id="${s}-tax" value="26"></td>
-                  <td><input type="number" id="${s}-pe" value="${stockPE}"></td>
-                </tr>`;
+                    </td>
+                    <td><input type="number" id="${s}-ebitda" value="${ebitdaMargin}"></td>
+                    <td><input type="number" id="${s}-other" value="${otherCosts}"></td>
+                    <td><input type="number" id="${s}-tax" value="26"></td>
+                    <td><input type="number" id="${s}-pe" value="${stockPE}"></td>
+                  </tr>`;
           }
 
           if (method === 'ev_ebitda') {
             return `
-                <tr>
-                  <td>${s}</td>
-                  <td>
-                  <div style="display: flex; align-items: center;">
-                      <input type="number" id="${s}-rev" value="${revGrowth}">
-                      <div style="display: flex; align-items: center; margin-left: 8px; cursor: pointer;" onclick="openCAGRCalculator(
-                        '${s}-rev',
-                          document.getElementById('rev').value,
-                          document.getElementById('years').value
-                      )">
-                        ${calcIcon}
+                  <tr>
+                    <td>${s}</td>
+                    <td>
+                    <div style="display: flex; align-items: center;">
+                        <input type="number" id="${s}-rev" value="${revGrowth}">
+                        <div style="display: flex; align-items: center; margin-left: 8px; cursor: pointer;" onclick="openCAGRCalculator(
+                          '${s}-rev',
+                            document.getElementById('rev').value,
+                            document.getElementById('years').value
+                        )">
+                          ${calcIcon}
+                        </div>
                       </div>
-                    </div>
-                    </td>
-                  <td><input type="number" id="${s}-ebitda" value="${ebitdaMargin}"></td>
-                  <td><input type="number" id="${s}-evEbitda" value="${evEbitda}"></td>
-                </tr>`;
+                      </td>
+                    <td><input type="number" id="${s}-ebitda" value="${ebitdaMargin}"></td>
+                    <td><input type="number" id="${s}-evEbitda" value="${evEbitda}"></td>
+                  </tr>`;
           }
 
           if (method === 'pb') {
             return `
-                <tr>
-                  <td>${s}</td>
-                  <td>
-                  <div style="display: flex; align-items: center;">
-                      <input type="number" id="${s}-networthGrowth" value="${revGrowth}">
-                      <div style="display: flex; align-items: center; margin-left: 8px; cursor: pointer;" onclick="openCAGRCalculator(
-                        '${s}-networthGrowth',
-                          document.getElementById('networth').value,
-                          document.getElementById('years').value
-                      )">
-                        ${calcIcon}
+                  <tr>
+                    <td>${s}</td>
+                    <td>
+                    <div style="display: flex; align-items: center;">
+                        <input type="number" id="${s}-networthGrowth" value="${revGrowth}">
+                        <div style="display: flex; align-items: center; margin-left: 8px; cursor: pointer;" onclick="openCAGRCalculator(
+                          '${s}-networthGrowth',
+                            document.getElementById('networth').value,
+                            document.getElementById('years').value
+                        )">
+                          ${calcIcon}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td><input type="number" id="${s}-pb" value="${
+                    </td>
+                    <td><input type="number" id="${s}-pb" value="${
               s === 'Bull' ? 6 : s === 'Base' ? 4 : 2
             }"></td>
-                </tr>`;
+                  </tr>`;
           }
 
           return null;
@@ -1432,37 +1481,37 @@ function showFinancialModelModal(
       let thead = '';
       if (method === 'pe') {
         thead = `
-            <tr>
-              <th>Scenario</th>
-              <th>Rev CAGR %</th>
-              <th>EBITDA Margin %</th>
-              <th>Other Costs</th>
-              <th>Tax Rate %</th>
-              <th>Exit PE</th>
-            </tr>`;
+              <tr>
+                <th>Scenario</th>
+                <th>Rev CAGR %</th>
+                <th>EBITDA Margin %</th>
+                <th>Other Costs</th>
+                <th>Tax Rate %</th>
+                <th>Exit PE</th>
+              </tr>`;
       } else if (method === 'ev_ebitda') {
         thead = `
-            <tr>
-              <th>Scenario</th>
-              <th>Rev CAGR %</th>
-              <th>EBITDA Margin %</th>
-              <th>Exit EV / EBITDA</th>
-            </tr>`;
+              <tr>
+                <th>Scenario</th>
+                <th>Rev CAGR %</th>
+                <th>EBITDA Margin %</th>
+                <th>Exit EV / EBITDA</th>
+              </tr>`;
       } else {
         thead = `
-            <tr>
-              <th>Scenario</th>
-              <th>Net Worth CAGR %</th>
-              <th>Exit P/B</th>
-            </tr>`;
+              <tr>
+                <th>Scenario</th>
+                <th>Net Worth CAGR %</th>
+                <th>Exit P/B</th>
+              </tr>`;
       }
 
       tableContainer.innerHTML = `
-          <table>
-            <thead>${thead}</thead>
-            <tbody>${rows}</tbody>
-          </table>
-        `;
+            <table>
+              <thead>${thead}</thead>
+              <tbody>${rows}</tbody>
+            </table>
+          `;
     }
 
     renderScenarioTable('pe'); // default
@@ -1556,40 +1605,40 @@ function showFinancialModelModal(
           : ['Future Net Worth (Fwd PB)', 'Future MCap'];
 
       document.getElementById('results').innerHTML = `
-          <h4>Results</h4>
-          <table style="width:100%; border-collapse: collapse; font-size: 1.4rem; margin-top: 1rem">
-            <thead>
-              <tr>
-                <th>Scenario</th>
-                ${headers.map((h) => `<th>${h}</th>`).join('')}
-                <th>Expected CAGR</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${results
-                .map((r) => {
-                  return `
-                  <tr>
-                    <td>${r.scenario}</td>
-                    ${headers
-                      .map((h) => {
-                        if (h.includes('Revenue')) return `<td>${r.futureRevenue}</td>`;
-                        if (h.includes('PAT'))
-                          return `<td>${r.futurePAT} (Fwd: ${r.forwardMultiple})</td>`;
-                        if (h.includes('EBITDA'))
-                          return `<td>${r.futureEBITDA} (Fwd: ${r.forwardMultiple})</td>`;
-                        if (h.includes('Net Worth'))
-                          return `<td>${r.futureNetWorth} (Fwd: ${r.forwardMultiple})</td>`;
-                        return '';
-                      })
-                      .join('')}
-                    <td>${r.futureMCap}</td>
-                    <td>${r.cagr}</td>
-                  </tr>`;
-                })
-                .join('')}
-            </tbody>
-          </table>`;
+            <h4>Results</h4>
+            <table style="width:100%; border-collapse: collapse; font-size: 1.4rem; margin-top: 1rem">
+              <thead>
+                <tr>
+                  <th>Scenario</th>
+                  ${headers.map((h) => `<th>${h}</th>`).join('')}
+                  <th>Expected CAGR</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${results
+                  .map((r) => {
+                    return `
+                    <tr>
+                      <td>${r.scenario}</td>
+                      ${headers
+                        .map((h) => {
+                          if (h.includes('Revenue')) return `<td>${r.futureRevenue}</td>`;
+                          if (h.includes('PAT'))
+                            return `<td>${r.futurePAT} (Fwd: ${r.forwardMultiple})</td>`;
+                          if (h.includes('EBITDA'))
+                            return `<td>${r.futureEBITDA} (Fwd: ${r.forwardMultiple})</td>`;
+                          if (h.includes('Net Worth'))
+                            return `<td>${r.futureNetWorth} (Fwd: ${r.forwardMultiple})</td>`;
+                          return '';
+                        })
+                        .join('')}
+                      <td>${r.futureMCap}</td>
+                      <td>${r.cagr}</td>
+                    </tr>`;
+                  })
+                  .join('')}
+              </tbody>
+            </table>`;
     });
   }, 0);
 }
@@ -1601,173 +1650,173 @@ function getFinancialModelHTML(
   currentEnterpriseValue = 0,
 ) {
   return `
-      <div class="financial-model-content">
-        <style>
-          .financial-model-content .input-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            margin-bottom: 2rem;
-            margin-top: 3rem;
-          }
-          .financial-model-content .input-group > div {
-            flex: 1;
-            min-width: 150px;
-          }
-          .financial-model-content input,
-          .financial-model-content select {
-            width: 100%;
-            padding: 0.4rem;
-            font-size: 1.5rem;
-            height: 34px;
-          }
-          .financial-model-content label {
-            font-size: 1.5rem;
-            display: block;
-            margin-bottom: 0.3rem;
-          }
-          .financial-model-content table,
-          .financial-model-content th,
-          .financial-model-content td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: center;
-          }
-          .financial-model-content th {
-            background-color: #f0f0f5;
-          }
-          .financial-model-content table {
-            width: 100%;
-            border-collapse: collapse;
-          }
-          .financial-model-content #calculate-btn {
-            margin-top: 1rem;
-            padding: 0.6rem 1.2rem;
-            background-color: rgb(25, 118, 210);
-            color: white;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            border-radius: 4px;
-          }
-        </style>
-
-        <div class="input-group">
-          <div>
-            <label>Current MCap:</label>
-            <input type="number" id="mcap" value="${currentMCap}">
+        <div class="financial-model-content">
+          <style>
+            .financial-model-content .input-group {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 1rem;
+              margin-bottom: 2rem;
+              margin-top: 3rem;
+            }
+            .financial-model-content .input-group > div {
+              flex: 1;
+              min-width: 150px;
+            }
+            .financial-model-content input,
+            .financial-model-content select {
+              width: 100%;
+              padding: 0.4rem;
+              font-size: 1.5rem;
+              height: 34px;
+            }
+            .financial-model-content label {
+              font-size: 1.5rem;
+              display: block;
+              margin-bottom: 0.3rem;
+            }
+            .financial-model-content table,
+            .financial-model-content th,
+            .financial-model-content td {
+              border: 1px solid #ccc;
+              padding: 8px;
+              text-align: center;
+            }
+            .financial-model-content th {
+              background-color: #f0f0f5;
+            }
+            .financial-model-content table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            .financial-model-content #calculate-btn {
+              margin-top: 1rem;
+              padding: 0.6rem 1.2rem;
+              background-color: rgb(25, 118, 210);
+              color: white;
+              border: none;
+              font-size: 1.5rem;
+              cursor: pointer;
+              border-radius: 4px;
+            }
+          </style>
+  
+          <div class="input-group">
+            <div>
+              <label>Current MCap:</label>
+              <input type="number" id="mcap" value="${currentMCap}">
+            </div>
+            <div>
+              <label>Current EV:</label>
+              <input type="number" id="enterpriseValue" value="${currentEnterpriseValue}">
+            </div>
+            <div>
+              <label>Current Net Worth:</label>
+              <input type="number" id="networth" value="${currentNetWorth}">
+            </div>
+            <div>
+              <label>Current Revenue:</label>
+              <input type="number" id="rev" value="${currentRevenue}">
+            </div>
+            <div>
+              <label>QIP (If any):</label>
+              <input type="number" id="qip" value="0">
+            </div>
+            <div>
+              <label>Years:</label>
+              <input type="number" id="years" value="3">
+            </div>
+            <div>
+              <label>Valuation Method:</label>
+              <select id="valuation-method">
+                <option value="pe">P/E</option>
+                <option value="ev_ebitda">EV/EBITDA</option>
+                <option value="pb">P/B</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label>Current EV:</label>
-            <input type="number" id="enterpriseValue" value="${currentEnterpriseValue}">
+  
+          <div id="scenario-table"></div>
+  
+          <div style="text-align:right">
+            <button id="calculate-btn">Calculate</button>
           </div>
-          <div>
-            <label>Current Net Worth:</label>
-            <input type="number" id="networth" value="${currentNetWorth}">
-          </div>
-          <div>
-            <label>Current Revenue:</label>
-            <input type="number" id="rev" value="${currentRevenue}">
-          </div>
-          <div>
-            <label>QIP (If any):</label>
-            <input type="number" id="qip" value="0">
-          </div>
-          <div>
-            <label>Years:</label>
-            <input type="number" id="years" value="3">
-          </div>
-          <div>
-            <label>Valuation Method:</label>
-            <select id="valuation-method">
-              <option value="pe">P/E</option>
-              <option value="ev_ebitda">EV/EBITDA</option>
-              <option value="pb">P/B</option>
-            </select>
-          </div>
+          <div id="results"></div>
         </div>
-
-        <div id="scenario-table"></div>
-
-        <div style="text-align:right">
-          <button id="calculate-btn">Calculate</button>
-        </div>
-        <div id="results"></div>
-      </div>
-    `;
+      `;
 }
 
 function openCAGRCalculator(targetInputId, initialValue, initialYearsValue) {
   const content = `
-      <style>
-        #cagr-popup-content {
-          font-size: 1.4rem;
-        }
-        #cagr-popup-content label {
-          display: block;
-          margin-bottom: 1rem;
-        }
-        #cagr-popup-content input {
-          width: 100%;
-          padding: 0.5rem;
-          font-size: 1.4rem;
-          box-sizing: border-box;
-        }
-        #cagr-popup-content .button-row {
-          display: flex;
-          justify-content: flex-end;
-          gap: 1rem;
-          margin-top: 1rem;
-        }
-        #cagr-popup-content button {
-          padding: 0.6rem 1.2rem;
-          font-size: 1.4rem;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-        }
-        #calc-cagr-btn {
-          background-color: #1976d2;
-          color: white;
-        }
-        #close-cagr-btn {
-          background-color: #e0e0e0;
-          color: black;
-        }
-        #cagr-popup-content .error {
-          color: red;
-          font-size: 1.3rem;
-          margin-top: 0.5rem;
-        }
-        #cagr-popup-content .result {
-          margin-top: 1rem;
-          font-weight: bold;
-          font-size: 1.4rem;
-        }
-      </style>
-      <div id="cagr-popup-content">
-        <label>
-          Start Value:
-          <input type="number" id="cagr-start" value="${initialValue}" />
-        </label>
-        <label>
-          End Value:
-          <input type="number" id="cagr-end" />
-        </label>
-        <label>
-          Years:
-          <input type="number" id="cagr-years" value="${initialYearsValue}" />
-        </label>
-
-        <div class="button-row" style="margin-top: 24px;">
-          <button id="close-cagr-btn">Close</button>
-          <button id="calc-cagr-btn">Calculate</button>
+        <style>
+          #cagr-popup-content {
+            font-size: 1.4rem;
+          }
+          #cagr-popup-content label {
+            display: block;
+            margin-bottom: 1rem;
+          }
+          #cagr-popup-content input {
+            width: 100%;
+            padding: 0.5rem;
+            font-size: 1.4rem;
+            box-sizing: border-box;
+          }
+          #cagr-popup-content .button-row {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-top: 1rem;
+          }
+          #cagr-popup-content button {
+            padding: 0.6rem 1.2rem;
+            font-size: 1.4rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+          }
+          #calc-cagr-btn {
+            background-color: #1976d2;
+            color: white;
+          }
+          #close-cagr-btn {
+            background-color: #e0e0e0;
+            color: black;
+          }
+          #cagr-popup-content .error {
+            color: red;
+            font-size: 1.3rem;
+            margin-top: 0.5rem;
+          }
+          #cagr-popup-content .result {
+            margin-top: 1rem;
+            font-weight: bold;
+            font-size: 1.4rem;
+          }
+        </style>
+        <div id="cagr-popup-content">
+          <label>
+            Start Value:
+            <input type="number" id="cagr-start" value="${initialValue}" />
+          </label>
+          <label>
+            End Value:
+            <input type="number" id="cagr-end" />
+          </label>
+          <label>
+            Years:
+            <input type="number" id="cagr-years" value="${initialYearsValue}" />
+          </label>
+  
+          <div class="button-row" style="margin-top: 24px;">
+            <button id="close-cagr-btn">Close</button>
+            <button id="calc-cagr-btn">Calculate</button>
+          </div>
+  
+          <p id="cagr-error" class="error"></p>
+          <p id="cagr-result" class="result"> </p>
         </div>
-
-        <p id="cagr-error" class="error"></p>
-        <p id="cagr-result" class="result"> </p>
-      </div>
-    `;
+      `;
 
   const modal = createModal({
     title: 'CAGR Calculator',
