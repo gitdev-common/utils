@@ -32,8 +32,8 @@ window.launchScreenerEnhancement = function () {
   );
   const cashFlowBody = cashFlowTable.querySelector('tbody');
 
-  addPATMarginRow('quarters');
-  addPATMarginRow('profit-loss');
+  addAndUpdateMarginRows('quarters');
+  addAndUpdateMarginRows('profit-loss');
   transferRowsToCashFlow(selectedRows, headerCells, cashFlowHeaders, cashFlowBody);
   addGrowthPopovers(selectedRows, ROWS_FOR_GROWTH_TOOLTIP);
   addCheckboxesToHeaders(cashFlowHeaderCells);
@@ -171,7 +171,7 @@ window.launchScreenerEnhancement = function () {
   }
 };
 
-function addPATMarginRow(tableId) {
+function addAndUpdateMarginRows(tableId) {
   const pnlTable = document.getElementById(tableId);
   if (!pnlTable) return showAlert(`Table with id "${tableId}" not found.`);
 
@@ -187,14 +187,28 @@ function addPATMarginRow(tableId) {
     row.cells[0]?.textContent.trim().toLowerCase().startsWith('net profit'),
   );
 
-  if (!salesRow || !netProfitRow) {
-    return showAlert('Sales/Revenue or Net Profit row not found.');
+  const operatingProfitRow = rows.find((row) =>
+    ['operating profit', 'financing profit'].some((keyword) =>
+      row.cells[0]?.textContent.trim().toLowerCase().startsWith(keyword),
+    ),
+  );
+  const opmRow = rows.find((row) =>
+    ['opm %', 'financing margin %'].some((keyword) =>
+      row.cells[0]?.textContent.trim().toLowerCase().startsWith(keyword),
+    ),
+  );
+
+  if (!salesRow || !netProfitRow || !operatingProfitRow) {
+    return showAlert('Sales/Revenue, Net Profit, or Operating Profit row not found.');
   }
 
   const salesValues = Array.from(salesRow.cells)
     .slice(1)
     .map((cell) => parseFloat(cell.textContent.replace(/[^0-9.-]+/g, '')) || 0);
   const netProfitValues = Array.from(netProfitRow.cells)
+    .slice(1)
+    .map((cell) => parseFloat(cell.textContent.replace(/[^0-9.-]+/g, '')) || 0);
+  const operatingProfitValues = Array.from(operatingProfitRow.cells)
     .slice(1)
     .map((cell) => parseFloat(cell.textContent.replace(/[^0-9.-]+/g, '')) || 0);
 
@@ -216,6 +230,19 @@ function addPATMarginRow(tableId) {
   });
 
   netProfitRow.parentNode.insertBefore(patMarginRow, netProfitRow.nextSibling);
+
+  if (opmRow) {
+    Array.from(opmRow.cells)
+      .slice(1)
+      .forEach((cell, index) => {
+        const sales = salesValues[index];
+        const operatingProfit = operatingProfitValues[index];
+        if (!sales || isNaN(operatingProfit)) {
+          return;
+        }
+        cell.textContent = sales ? ((operatingProfit / sales) * 100).toFixed(2) + '%' : '-';
+      });
+  }
 }
 
 function createSectionInfoLabel() {
