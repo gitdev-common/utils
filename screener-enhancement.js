@@ -5,6 +5,11 @@ window.launchScreenerEnhancement = function () {
   }
   window.unavailableRatios = [];
 
+  if (document.body.classList.contains('dark')) {
+    window.darkMode = true;
+    console.log('Dark mode detected');
+  }
+
   injectStyles();
   const ROWS_TO_SELECT = [
     'Revenue',
@@ -564,6 +569,7 @@ async function sumSelectedColumns(headerCells, tableBody) {
       total: ((cfo.total / ebitda.total) * 100).toFixed(2) + ' %',
     });
 
+  const darkMode = window.darkMode;
   const skippedRows = ['Fixed assets purchased', 'Fixed assets sold'];
   const headerDisplay = `<div style="margin-bottom: 32px">${selectedNames.join(', ')}</div>`;
   const rowsDisplay = rowSums
@@ -574,12 +580,12 @@ async function sumSelectedColumns(headerCells, tableBody) {
         row.label?.startsWith('Net Profit');
       return `
           <div style="font-weight: ${isLabelBold ? '600' : ''}; padding: 8px 4px; background: ${
-        i % 2 === 0 ? 'rgb(248,248,255)' : ''
+        i % 2 === 0 ? (darkMode ? '#000' : 'rgb(248,248,255)') : ''
       }">${row.label}</div>
           <div style="font-weight: ${
             isLabelBold ? '600' : ''
           }; text-align: right; padding: 8px 4px; background: ${
-        i % 2 === 0 ? 'rgb(248,248,255)' : ''
+        i % 2 === 0 ? (darkMode ? '#000' : 'rgb(248,248,255)') : ''
       }">${row.total}</div>
         `;
     })
@@ -595,6 +601,8 @@ async function sumSelectedColumns(headerCells, tableBody) {
 }
 
 function createModal({ title = 'Modal Title', content = '', isHTML = false, maxWidth = '400px' }) {
+  const darkMode = window.darkMode;
+
   const overlay = document.createElement('div');
   Object.assign(overlay.style, {
     position: 'fixed',
@@ -611,7 +619,7 @@ function createModal({ title = 'Modal Title', content = '', isHTML = false, maxW
 
   const modal = document.createElement('div');
   Object.assign(modal.style, {
-    backgroundColor: '#fff',
+    backgroundColor: darkMode ? '#333' : '#fff',
     padding: '20px',
     borderRadius: '8px',
     boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
@@ -1279,6 +1287,7 @@ function createDrawerWithLayoutToggle() {
   document.body.appendChild(drawer);
   document.body.appendChild(pageWrapper);
 
+  const darkMode = window.darkMode;
   const styles = `
           body {
             margin: 0;
@@ -1291,7 +1300,7 @@ function createDrawerWithLayoutToggle() {
             left: -20%;
             width: 20%;
             height: 100%;
-            background: white;
+            background: inherit;
             box-shadow: 2px 0 4px rgba(0,0,0,0.2);
             transition: left 0.3s ease, width 0.3s ease;
             z-index: 9999;
@@ -1313,14 +1322,16 @@ function createDrawerWithLayoutToggle() {
             transform: translateY(-50%);
             width: 30px;
             height: 60px;
-            background: white;
+            background: inherit;
             font-size: 20px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 0 5px 5px 0;
-            box-shadow: 3px 0 4px rgba(0,0,0,0.2);
+            box-shadow:   ${
+              darkMode ? '3px 0 4px rgba(250,250,250,0.4)' : '3px 0 4px rgba(0,0,0,0.2)'
+            };
           }
       
           #drawer-content {
@@ -1711,6 +1722,7 @@ function getFinancialModelHTML(
             }
             .financial-model-content th {
               background-color: #f0f0f5;
+              color: #333;
             }
             .financial-model-content table {
               width: 100%;
