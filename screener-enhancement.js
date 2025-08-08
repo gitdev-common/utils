@@ -174,6 +174,7 @@ window.launchScreenerEnhancement = function () {
     getQuickRatio("Enterprise Value");
   const { value: evEbitda, notFound: evEbitdaNotFound } =
     getQuickRatio("EVEBITDA");
+  const { value: currentPrice } = getQuickRatio("Current Price");
 
   if (evNotFound) {
     window.unavailableRatios.push("Enterprise Value");
@@ -192,7 +193,8 @@ window.launchScreenerEnhancement = function () {
       enterpriseValue,
       otherCosts,
       stockPE,
-      evEbitda
+      evEbitda,
+      currentPrice
     );
   });
   pnlTable.parentElement.insertBefore(finModellingBtn, pnlTable);
@@ -1561,13 +1563,20 @@ function showFinancialModelModal(
   currentEnterpriseValue = 0,
   currentOtherCosts = 30,
   currentStockPE = 20,
-  currentEvEbitda = 15
+  currentEvEbitda = 15,
+  currentPrice
 ) {
+  const numberOfShares = Math.round(
+    (currentMCap / currentPrice) * MARKET_CAP_MULTIPLIER
+  );
+
   const content = getFinancialModelHTML(
     currentRevenue,
     currentMCap,
     currentNetWorth,
-    currentEnterpriseValue
+    currentEnterpriseValue,
+    currentPrice,
+    numberOfShares
   );
   createModal({
     title: "Financial Modelling (Bull / Base / Bear)",
@@ -1586,6 +1595,7 @@ function showFinancialModelModal(
   setTimeout(() => {
     const methodSelector = document.getElementById("valuation-method");
     const tableContainer = document.getElementById("scenario-table");
+    const sharePriceInput = document.getElementById("share-price");
 
     function renderScenarioTable(method) {
       const rows = ["Bull", "Base", "Bear"]
@@ -1593,13 +1603,13 @@ function showFinancialModelModal(
           const revGrowth = s === "Bull" ? 25 : s === "Base" ? 20 : 15;
           const ebitdaMargin =
             s === "Base"
-              ? currentEbitdaMargin
+              ? currentEbitdaMargin.toFixed(2)
               : s === "Bull"
               ? (currentEbitdaMargin + 2).toFixed(2)
               : (currentEbitdaMargin - 2).toFixed(2);
           const otherCosts =
             s === "Base"
-              ? currentOtherCosts
+              ? currentOtherCosts.toFixed(1)
               : s === "Bull"
               ? (0.9 * currentOtherCosts).toFixed(1)
               : (1.1 * currentOtherCosts).toFixed(1);
@@ -1738,6 +1748,18 @@ function showFinancialModelModal(
       document.getElementById("results").innerHTML = "";
     });
 
+    sharePriceInput.addEventListener("change", () => {
+      const calculatedMarketCap = getMarketCapFromPrice(
+        parseFloat(sharePriceInput.value),
+        numberOfShares
+      );
+      document.getElementById("mcap").value = calculatedMarketCap;
+
+      const marketCapDifference = Math.round(calculatedMarketCap - currentMCap);
+      const calculatedEv = currentEnterpriseValue + marketCapDifference;
+      document.getElementById("enterpriseValue").value = calculatedEv;
+    });
+
     document.getElementById("calculate-btn")?.addEventListener("click", () => {
       const rev = parseFloat(document.getElementById("rev").value);
       const mcapVal = parseFloat(document.getElementById("mcap").value);
@@ -1771,9 +1793,10 @@ function showFinancialModelModal(
           const futureRevenue = rev * Math.pow(1 + revGrowth, years);
           const ebitda = futureRevenue * ebitdaMargin;
           const nopat = (ebitda - otherCostVal) * (1 - taxPct);
-          futureMCap = nopat * pe;
-          const cagr = (Math.pow(futureMCap / mcap, 1 / years) - 1) * 100;
+          const futureMCapExQip = nopat * pe;
+          const cagr = (Math.pow(futureMCapExQip / mcap, 1 / years) - 1) * 100;
           const forwardMultiple = (mcap / nopat).toFixed(1);
+          futureMCap = nopat * pe + qip;
 
           results.push({
             scenario: s,
@@ -1797,10 +1820,12 @@ function showFinancialModelModal(
 
           const futureRevenue = rev * Math.pow(1 + revGrowth, years);
           const ebitda = futureRevenue * ebitdaMargin;
-          futureMCap = ebitda * multiple;
+          const futureMCapExQip = ebitda * multiple;
+
           const cagr =
-            (Math.pow(futureMCap / enterpriseValue, 1 / years) - 1) * 100;
+            (Math.pow(futureMCapExQip / enterpriseValue, 1 / years) - 1) * 100;
           const forwardMultiple = (enterpriseValue / ebitda).toFixed(1);
+          futureMCap = ebitda * multiple + qip;
 
           results.push({
             scenario: s,
@@ -1820,9 +1845,11 @@ function showFinancialModelModal(
           const pb = parseFloat(document.getElementById(`${s}-pb`).value);
           const futureNetWorth =
             netWorth * Math.pow(1 + netWorthGrowthRate, years) + qip;
-          futureMCap = futureNetWorth * pb;
-          const cagr = (Math.pow(futureMCap / mcap, 1 / years) - 1) * 100;
+
+          const futureMCapExQip = futureNetWorth * pb;
+          const cagr = (Math.pow(futureMCapExQip / mcap, 1 / years) - 1) * 100;
           const forwardMultiple = (mcap / futureNetWorth).toFixed(1);
+          futureMCap = futureNetWorth * pb + qip;
 
           results.push({
             scenario: s,
@@ -1886,12 +1913,27 @@ function showFinancialModelModal(
   }, 0);
 }
 
+const MARKET_CAP_MULTIPLIER = 10000000;
+function getMarketCapFromPrice(price, numberOfShares) {
+  if (isNaN(price) || isNaN(numberOfShares)) {
+    return 0;
+  }
+  return Math.round((price * numberOfShares) / MARKET_CAP_MULTIPLIER);
+}
+
 function getFinancialModelHTML(
   currentRevenue,
   currentMCap,
   currentNetWorth = 0,
-  currentEnterpriseValue = 0
+  currentEnterpriseValue = 0,
+  currentPrice = 0,
+  numberOfShares
 ) {
+  const calculatedMarketCap = getMarketCapFromPrice(
+    currentPrice,
+    numberOfShares
+  );
+
   return `
         <div class="financial-model-content">
           <style>
@@ -1904,7 +1946,7 @@ function getFinancialModelHTML(
             }
             .financial-model-content .input-group > div {
               flex: 1;
-              min-width: 150px;
+              min-width: 120px;
             }
             .financial-model-content input,
             .financial-model-content select {
@@ -1948,7 +1990,11 @@ function getFinancialModelHTML(
           <div class="input-group">
             <div>
               <label>Current MCap:</label>
-              <input type="number" id="mcap" value="${currentMCap}">
+              <input type="number" id="mcap" value="${calculatedMarketCap}" style="pointer-events: none; border: none;" readonly>
+            </div>
+            <div>
+              <label>Share price:</label>
+              <input type="number" id="share-price" value="${currentPrice}">
             </div>
             <div>
               <label>Current EV:</label>
