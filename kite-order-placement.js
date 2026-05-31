@@ -10,6 +10,7 @@ const HARDCODED_DEFAULTS = {
   DEFAULT_INSTRUMENT_ID: null,
   PREV_LOWER_CIRCUIT_LIMIT: 0,
   PREV_UPPER_CIRCUIT_LIMIT: 0,
+  ORDER_QUANTITY: '',
   ORDER_TYPE: 'SELL',
   DEFAULT_INTERVAL_MS: 300,
 };
@@ -22,6 +23,7 @@ const PREV_LOWER_CIRCUIT_LIMIT =
 const PREV_UPPER_CIRCUIT_LIMIT =
   Number(getSessionStorageItem('PREV_UPPER_CIRCUIT_LIMIT')) ||
   Number(HARDCODED_DEFAULTS.PREV_UPPER_CIRCUIT_LIMIT);
+const ORDER_QUANTITY = getSessionStorageItem('ORDER_QUANTITY') || HARDCODED_DEFAULTS.ORDER_QUANTITY;
 const ORDER_TYPE = (
   getSessionStorageItem('ORDER_TYPE') || HARDCODED_DEFAULTS.ORDER_TYPE
 ).toUpperCase(); // BUY or SELL
@@ -32,11 +34,11 @@ const DEFAULT_INTERVAL_MS =
 const NUDGE_CHECK_INTERVAL_MS = 100;
 const NUDGE_MAX_ATTEMPTS = 20;
 const HOVER_OPTION_CHECK_INTERVAL_MS = 100;
-const HOVER_OPTION_MAX_ATTEMPTS = 20;
+const HOVER_OPTION_MAX_ATTEMPTS = 10;
 const MAX_MISSING_LIMITS_TICKS = 10;
 
 const ORDER_WINDOW_CHECK_INTERVAL_MS = 100;
-const ORDER_WINDOW_MAX_ATTEMPTS = 20;
+const ORDER_WINDOW_MAX_ATTEMPTS = 10;
 const ROW_ACTION_LABELS = {
   BUY: 'Buy',
   SELL: 'Sell',
@@ -52,6 +54,23 @@ function sanitizePrice(value) {
   return String(value)
     .replace(/[^0-9.]/g, '')
     .trim();
+}
+
+function sanitizeQuantity(value) {
+  return String(value)
+    .replace(/[^0-9]/g, '')
+    .trim();
+}
+
+function normalizePriceForCompare(value) {
+  const cleaned = sanitizePrice(value);
+  if (!cleaned) return String(value || '').trim();
+
+  const parsed = Number(cleaned);
+  if (!Number.isFinite(parsed)) return String(value || '').trim();
+
+  // Canonical numeric form: 100.20 and 100.2 both become "100.2".
+  return parsed.toString();
 }
 
 function normalizeOrderType(orderType) {
@@ -92,6 +111,26 @@ function setInputValue(input, value) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));
   input.blur();
+}
+
+function ensureLimitOrderType(orderWindow) {
+  if (!orderWindow) return false;
+
+  const limitRadio = orderWindow.querySelector('input[name="orderType"][value="LIMIT"]');
+  if (!limitRadio) return false;
+
+  if (!limitRadio.checked) {
+    const limitLabel = orderWindow.querySelector(`label[for="${limitRadio.id}"]`);
+    if (limitLabel) {
+      limitLabel.click();
+    } else {
+      limitRadio.click();
+    }
+  }
+
+  limitRadio.dispatchEvent(new Event('input', { bubbles: true }));
+  limitRadio.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
 }
 
 function getWindowSide(orderWindow) {
@@ -220,7 +259,20 @@ function placeOrderFromWindow({
       return;
     }
 
-    const priceInput = getInputByLabel(orderWindow, 'Price');
+    let priceInput = getInputByLabel(orderWindow, 'Price');
+    // If price is disabled, switch to LIMIT order type before submit.
+    if (!priceInput) {
+      priceInput = getInputByLabel(orderWindow, 'Market price');
+      ensureLimitOrderType(orderWindow);
+
+      priceInput = getInputByLabel(orderWindow, 'Price');
+      console.info(`[${instrumentId}] Price input disabled. Switched to LIMIT order type.`);
+    }
+
+    if (priceInput) {
+      setInputValue(priceInput, priceToUse);
+    }
+
     if (!priceInput) {
       if (attempts >= maxAttempts) {
         console.error(`[${instrumentId}] Price input not found in order window after retries.`);
@@ -249,7 +301,14 @@ function placeOrderFromWindow({
       return;
     }
 
-    setInputValue(priceInput, priceToUse);
+    const quantityInput =
+      getInputByLabel(orderWindow, 'Qty.') || getInputByLabel(orderWindow, 'Qty');
+    const quantityToUse = sanitizeQuantity(ORDER_QUANTITY);
+    console.log('qty ti use', quantityToUse);
+    if (quantityInput && quantityToUse && Number(quantityToUse) > 0) {
+      setInputValue(quantityInput, quantityToUse);
+    }
+
     submitButton.click();
     console.info(`[${instrumentId}] ${targetSide} order submitted at price ${priceToUse}.`);
     confirmNudgeIfPresent({ instrumentId });
@@ -362,11 +421,6 @@ function getRowActionButtonByLabel(row, labelText) {
   }
 
   return null;
-}
-
-function isMarketDepthActionVisible(row) {
-  const marketDepthButton = getRowActionButtonByLabel(row, ROW_ACTION_LABELS.MARKET_DEPTH);
-  return isVisibleElement(marketDepthButton);
 }
 
 function isVisibleElement(element) {
@@ -573,17 +627,6 @@ function createCircuitLimitPoller({
       hoverOptionsClicked = true;
     }
 
-    // UC/LC become available only after row hover actions (especially Market depth) are visible.
-    if (!isMarketDepthActionVisible(row)) {
-      if (!areRowActionsVisible(row)) {
-        dispatchHoverEvents(row);
-      }
-      console.info(
-        `[${instrumentId}] Waiting for Market depth action visibility before reading limits.`,
-      );
-      return;
-    }
-
     const limits = readCurrentLimits(row);
     if (!limits) {
       missingLimitsStreak += 1;
@@ -609,7 +652,7 @@ function createCircuitLimitPoller({
     const { uc, lc, upperCircuitElement, lowerCircuitElement } = limits;
 
     flash(upperCircuitElement, '#90ee90');
-    flash(lowerCircuitElement, '#87cefa');
+    flash(lowerCircuitElement, '#FFC7C7');
     console.log(`[${instrumentId}] UC=${uc} | LC=${lc}`);
 
     if (!previousLimits) {
@@ -620,8 +663,8 @@ function createCircuitLimitPoller({
       };
     }
 
-    const ucChanged = previousLimits.uc !== uc;
-    const lcChanged = previousLimits.lc !== lc;
+    const ucChanged = normalizePriceForCompare(previousLimits.uc) !== normalizePriceForCompare(uc);
+    const lcChanged = normalizePriceForCompare(previousLimits.lc) !== normalizePriceForCompare(lc);
 
     if (!ucChanged && !lcChanged) {
       return;
@@ -660,6 +703,8 @@ function createCircuitLimitPoller({
   };
 }
 
+let activeUcLcPoller = null;
+
 function createDefaultPoller() {
   return createCircuitLimitPoller({
     instrumentId: DEFAULT_INSTRUMENT_ID,
@@ -682,13 +727,20 @@ function createDefaultPoller() {
         lc: current.lc,
         instrumentId,
       });
+
+      activeUcLcPoller = null;
     },
   });
 }
 
-let activeUcLcPoller = null;
+const ALLOWED_URL_PREFIX = 'https://kite.zerodha.com/';
 
 function launchUcLcPoll() {
+  if (!window.location.href.startsWith(ALLOWED_URL_PREFIX)) {
+    console.info(`uc_lc_polling skipped. URL must start with ${ALLOWED_URL_PREFIX}`);
+    return false;
+  }
+
   if (activeUcLcPoller) {
     console.info('UC/LC poller is already running.');
     return activeUcLcPoller;

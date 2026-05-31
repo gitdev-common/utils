@@ -24,6 +24,7 @@ function getPrefilledValues() {
     DEFAULT_INSTRUMENT_ID: getSessionStorageItem('DEFAULT_INSTRUMENT_ID') || '',
     PREV_LOWER_CIRCUIT_LIMIT: getSessionStorageItem('PREV_LOWER_CIRCUIT_LIMIT'),
     PREV_UPPER_CIRCUIT_LIMIT: getSessionStorageItem('PREV_UPPER_CIRCUIT_LIMIT'),
+    ORDER_QUANTITY: getSessionStorageItem('ORDER_QUANTITY') || 1,
     ORDER_TYPE: orderType,
     DEFAULT_INTERVAL_MS: getSessionStorageItem('DEFAULT_INTERVAL_MS') || '300',
   };
@@ -134,6 +135,12 @@ function buildConfigForm() {
     values.PREV_UPPER_CIRCUIT_LIMIT,
     'number',
   );
+  const orderQuantityField = createField(
+    'ORDER_QUANTITY',
+    'cfg-order-quantity',
+    values.ORDER_QUANTITY,
+    'number',
+  );
   const orderTypeField = createOrderTypeDropdownField('cfg-order-type', values.ORDER_TYPE);
   const intervalField = createField(
     'DEFAULT_INTERVAL_MS',
@@ -170,7 +177,7 @@ function buildConfigForm() {
   closeButton.style.cursor = 'pointer';
 
   const note = document.createElement('div');
-  note.textContent = 'Prefilled from sessionStorage; Save updates all 5 keys.';
+  note.textContent = 'Prefilled from sessionStorage; Save updates all 6 keys.';
   note.style.marginTop = '8px';
   note.style.color = '#4b5563';
 
@@ -178,12 +185,14 @@ function buildConfigForm() {
     const instrumentValue = document.getElementById('cfg-default-instrument-id').value;
     const prevLcValue = document.getElementById('cfg-prev-lower-circuit-limit').value;
     const prevUcValue = document.getElementById('cfg-prev-upper-circuit-limit').value;
+    const orderQuantityValue = document.getElementById('cfg-order-quantity').value;
     const orderTypeValue = document.getElementById('cfg-order-type').value;
     const intervalValue = document.getElementById('cfg-default-interval-ms').value;
 
     setSessionStorageItem('DEFAULT_INSTRUMENT_ID', instrumentValue || '');
     setSessionStorageItem('PREV_LOWER_CIRCUIT_LIMIT', prevLcValue || '');
     setSessionStorageItem('PREV_UPPER_CIRCUIT_LIMIT', prevUcValue || '');
+    setSessionStorageItem('ORDER_QUANTITY', orderQuantityValue || '');
     setSessionStorageItem('ORDER_TYPE', (orderTypeValue || 'SELL').toUpperCase());
     setSessionStorageItem('DEFAULT_INTERVAL_MS', intervalValue || 300);
 
@@ -202,6 +211,7 @@ function buildConfigForm() {
   root.appendChild(instrumentField);
   root.appendChild(prevLcField);
   root.appendChild(prevUcField);
+  root.appendChild(orderQuantityField);
   root.appendChild(orderTypeField);
   root.appendChild(intervalField);
   root.appendChild(actions);
