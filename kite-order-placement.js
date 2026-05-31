@@ -262,7 +262,6 @@ function placeOrderFromWindow({
     let priceInput = getInputByLabel(orderWindow, 'Price');
     // If price is disabled, switch to LIMIT order type before submit.
     if (!priceInput) {
-      priceInput = getInputByLabel(orderWindow, 'Market price');
       ensureLimitOrderType(orderWindow);
 
       priceInput = getInputByLabel(orderWindow, 'Price');
@@ -304,7 +303,6 @@ function placeOrderFromWindow({
     const quantityInput =
       getInputByLabel(orderWindow, 'Qty.') || getInputByLabel(orderWindow, 'Qty');
     const quantityToUse = sanitizeQuantity(ORDER_QUANTITY);
-    console.log('qty ti use', quantityToUse);
     if (quantityInput && quantityToUse && Number(quantityToUse) > 0) {
       setInputValue(quantityInput, quantityToUse);
     }
@@ -733,11 +731,11 @@ function createDefaultPoller() {
   });
 }
 
-const ALLOWED_URL_PREFIX = 'https://kite.zerodha.com/';
+const ALLOWED_KITE_URL_PREFIX = 'https://kite.zerodha.com/';
 
 function launchUcLcPoll() {
-  if (!window.location.href.startsWith(ALLOWED_URL_PREFIX)) {
-    console.info(`uc_lc_polling skipped. URL must start with ${ALLOWED_URL_PREFIX}`);
+  if (!window.location.href.startsWith(ALLOWED_KITE_URL_PREFIX)) {
+    console.info(`uc_lc_polling skipped. URL must start with ${ALLOWED_KITE_URL_PREFIX}`);
     return false;
   }
 
