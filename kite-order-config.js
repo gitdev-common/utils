@@ -177,7 +177,7 @@ function buildConfigForm() {
   closeButton.style.cursor = 'pointer';
 
   const note = document.createElement('div');
-  note.textContent = 'Prefilled from sessionStorage; Save updates all 6 keys.';
+  note.textContent = 'Prefilled from sessionStorage; Save updates all keys.';
   note.style.marginTop = '8px';
   note.style.color = '#4b5563';
 
@@ -196,7 +196,7 @@ function buildConfigForm() {
     setSessionStorageItem('ORDER_TYPE', (orderTypeValue || 'SELL').toUpperCase());
     setSessionStorageItem('DEFAULT_INTERVAL_MS', intervalValue || 300);
 
-    console.info('Saved 5 config keys to sessionStorage.');
+    console.info('Saved config keys to sessionStorage.');
     root.remove();
   });
 
