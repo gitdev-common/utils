@@ -486,11 +486,72 @@ function handleHoverOptionLabel({ row, label, instrumentId }) {
   }
 
   const target = findClickableByText(row, label) || findClickableByText(document, label);
+  console.log(target, '>>>>>> target');
   if (!target) return false;
 
   target.click();
   console.info(`[${instrumentId}] Clicked hover option: ${label}`);
   return true;
+}
+
+function toggleRowAction(row, label, instrumentId, checkEveryMs = 50, maxAttempts = 5) {
+  if (!row || !label) return false;
+
+  let attempts = 0;
+
+  const tryToggle = () => {
+    attempts += 1;
+
+    // Ensure row actions are visible and ready
+    if (!areRowActionsVisible(row)) {
+      dispatchHoverEvents(row);
+    }
+
+    // Try multiple search strategies
+    let target = getRowActionButtonByLabel(row, label);
+    if (!target) {
+      target = findClickableByText(row, label);
+    }
+    if (!target) {
+      target = findClickableByText(document, label);
+    }
+
+    if (!target || target.disabled) {
+      if (attempts >= maxAttempts) {
+        console.warn(`[${instrumentId}] Could not find row action after retries: ${label}`);
+        return false;
+      }
+      // Retry with slight delay
+      setTimeout(tryToggle, checkEveryMs);
+      return false;
+    }
+
+    target.click();
+    console.info(`[${instrumentId}] Toggled row action: ${label}`);
+    return true;
+  };
+
+  return tryToggle();
+}
+
+function refreshMarketDepth(row, instrumentId) {
+  const marketDepthLabel = ROW_ACTION_LABELS.MARKET_DEPTH;
+
+  if (!areRowActionsVisible(row)) {
+    dispatchHoverEvents(row);
+  }
+
+  // Close market depth if it's open
+  if (isMarketDepthTicksPresent()) {
+    toggleRowAction(row, marketDepthLabel, instrumentId);
+    // Wait little less than Default time interval, then open it again to force a refresh
+    setTimeout(() => {
+      toggleRowAction(row, marketDepthLabel, instrumentId);
+    }, DEFAULT_INTERVAL_MS - 100);
+  } else {
+    // If closed, just open it
+    toggleRowAction(row, marketDepthLabel, instrumentId);
+  }
 }
 
 function clickRowHoverOptions({
@@ -584,6 +645,7 @@ function createCircuitLimitPoller({
   let hoverOptionsClicked = false;
   let missingLimitsStreak = 0;
   let hasReadLimitsOnce = false;
+  let marketDepthRefreshNeeded = false;
 
   function hasValue(value) {
     return value !== null && value !== undefined && String(value).trim() !== '';
@@ -623,10 +685,19 @@ function createCircuitLimitPoller({
         instrumentId,
       });
       hoverOptionsClicked = true;
+      marketDepthRefreshNeeded = true;
+      return;
+    }
+
+    if (marketDepthRefreshNeeded) {
+      refreshMarketDepth(row, instrumentId);
+      marketDepthRefreshNeeded = false;
+      return;
     }
 
     const limits = readCurrentLimits(row);
     if (!limits) {
+      marketDepthRefreshNeeded = true;
       missingLimitsStreak += 1;
       if (!hasReadLimitsOnce && missingLimitsStreak >= maxMissingLimitsTicks) {
         stop(
@@ -665,6 +736,7 @@ function createCircuitLimitPoller({
     const lcChanged = normalizePriceForCompare(previousLimits.lc) !== normalizePriceForCompare(lc);
 
     if (!ucChanged && !lcChanged) {
+      marketDepthRefreshNeeded = true;
       return;
     }
 
