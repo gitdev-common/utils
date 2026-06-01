@@ -486,7 +486,6 @@ function handleHoverOptionLabel({ row, label, instrumentId }) {
   }
 
   const target = findClickableByText(row, label) || findClickableByText(document, label);
-  console.log(target, '>>>>>> target');
   if (!target) return false;
 
   target.click();
