@@ -644,7 +644,6 @@ function createCircuitLimitPoller({
   let hoverOptionsClicked = false;
   let missingLimitsStreak = 0;
   let hasReadLimitsOnce = false;
-  let marketDepthRefreshNeeded = false;
 
   function hasValue(value) {
     return value !== null && value !== undefined && String(value).trim() !== '';
@@ -684,19 +683,14 @@ function createCircuitLimitPoller({
         instrumentId,
       });
       hoverOptionsClicked = true;
-      marketDepthRefreshNeeded = true;
       return;
     }
 
-    if (marketDepthRefreshNeeded) {
-      refreshMarketDepth(row, instrumentId);
-      marketDepthRefreshNeeded = false;
-      return;
-    }
+    // Keep market depth refreshed on each cycle, then read limits in the same tick.
+    refreshMarketDepth(row, instrumentId);
 
     const limits = readCurrentLimits(row);
     if (!limits) {
-      marketDepthRefreshNeeded = true;
       missingLimitsStreak += 1;
       if (!hasReadLimitsOnce && missingLimitsStreak >= maxMissingLimitsTicks) {
         stop(
@@ -735,7 +729,6 @@ function createCircuitLimitPoller({
     const lcChanged = normalizePriceForCompare(previousLimits.lc) !== normalizePriceForCompare(lc);
 
     if (!ucChanged && !lcChanged) {
-      marketDepthRefreshNeeded = true;
       return;
     }
 
